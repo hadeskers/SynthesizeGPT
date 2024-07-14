@@ -1,5 +1,6 @@
 ## Install extension from Store:
 Chrome web store: https://chromewebstore.google.com/detail/synthesize-chatgpt/alhlbggjdnnmahajjndfeagfaecebphh
+
 Firefox web store: https://addons.mozilla.org/firefox/addon/synthesize-chatgpt/
 
 
