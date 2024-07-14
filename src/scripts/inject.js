@@ -78,13 +78,12 @@ window.addDownload = () => {
     });
 }
 
-window.addEventListener('load', function () {
-    if(!['chatgpt.com', 'chat.openai.com'].includes(window.location.hostname)){
-        return;
-    }
+
+if(['chatgpt.com', 'chat.openai.com'].includes(window.location.hostname)){
     window.addDownload();
     setInterval(() => {
         window.addDownload();
     }, 2000);
-});
+}
+
 

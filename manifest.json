@@ -1,5 +1,5 @@
 {
-    "manifest_version": 3,
+    "manifest_version": 2,
     "name": "Synthesize ChatGPT",
     "version": "2.1",
     "author": "Hadesker.Net",
@@ -8,14 +8,7 @@
         "128": "src/icons/128.png"
     },
     "background": {
-        "service_worker": "src/scripts/background.js"
-    },
-    "action": {
-        "default_icon": {
-            "128": "src/icons/128.png"
-        },
-        "default_title": "Synthesize ChatGPT",
-        "default_popup": "src/popup.html"
+        "scripts": ["src/scripts/background.js"]
     },
     "content_scripts": [
         {
@@ -23,9 +16,5 @@
             "js": ["src/scripts/content.js"],
             "run_at": "document_idle"
         }
-    ],
-    "web_accessible_resources": [{
-        "resources": ["src/scripts/inject.js"],
-        "matches": ["https://chatgpt.com/*","https://chat.openai.com/*"]
-    }]
+    ]
 }

@@ -9,5 +9,5 @@ const includesPaths = ['manifest.json', 'src'];
 
 const items = fs.readdirSync('.').filter(item => includesPaths.includes(item)).join(' ');
 
-// Only support MACOS
+// Only support Mac/Linux
 execSync(`zip -r dist.zip ${items} -x '.*' -x '**/.*' -x '__MACOSX'`);
