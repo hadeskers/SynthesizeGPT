@@ -1,4 +1,4 @@
-const iconDownload =`<svg xmlns="http://www.w3.org/2000/svg" fill="none" width="24" height="24" viewBox="0 0 24 24"
+const iconDownload = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" width="24" height="24" viewBox="0 0 24 24"
                                                  stroke-width="1.5" stroke="currentColor" class="icon-md-heavy">
     <path stroke-linecap="round" stroke-linejoin="round"
           d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l3 3m0 0 3-3m-3 3V2.25"/>
@@ -10,24 +10,71 @@ const loadingSpinner = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" widt
 </svg>
 `;
 
-function fetchAudio({message_id, text_content}, callback) {
-    const accessToken = window.__NEXT_DATA__?.props?.pageProps?.session?.accessToken;
-    if(!accessToken){
-        callback();
-        alert('Please login to download audio');
+function downloadBlob(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function getAccessToken() {
+    return window.__NEXT_DATA__?.props?.pageProps?.session?.accessToken || window.__remixContext?.state?.loaderData?.root?.clientBootstrap?.session?.accessToken;
+}
+
+var _globalVoices = null;
+async function fetchVoices() {
+    const accessToken = getAccessToken();
+    if (!accessToken) {
         return;
     }
+    return fetch('https://chatgpt.com/backend-api/settings/voices', {
+        "headers": {
+            "accept": "*/*",
+            "authorization": `Bearer ${accessToken}`,
+        },
+        "body": null,
+        "method": "GET"
+    })
+        .then(response => response.json())
+        .then(data => {
+            _globalVoices = data['voices'];
+            return _globalVoices;
+        })
+        .catch(err => console.log(err));
+}
+
+const _audioCached = {};
+function fetchAudio({message_id, text_content, selected_voice}, callback) {
     const conversation_id = window.location.pathname.split('/').find(item => item.length > 10 && item.includes('-'));
-    if(!conversation_id){
+    if (!conversation_id) {
         callback();
         alert('Can not detect conversation ID');
         return;
     }
+
+    selected_voice = selected_voice || 'ember';
+
+    const cacheKey = `${conversation_id}_${message_id}_${selected_voice}`;
+    if (_audioCached[cacheKey] && _audioCached[cacheKey].filename) {
+        const {blob, filename} = _audioCached[cacheKey];
+        downloadBlob(blob, filename);
+        callback();
+        return;
+    }
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+        callback();
+        alert('Please login to download audio');
+        return;
+    }
     const format = 'mp3';
     const illegalChars = /[\/?<>\\:*|"]/g;
-    const voice = 'ember'; // ember, cove, breeze, juniper
     const filename = (text_content || 'audio').replace(illegalChars, '-').substring(0, 40).trim() + '.' + format;
-    fetch(`https://chatgpt.com/backend-api/synthesize?message_id=${message_id}&conversation_id=${conversation_id}&voice=${voice}&format=${format}`, {
+    fetch(`https://chatgpt.com/backend-api/synthesize?message_id=${message_id}&conversation_id=${conversation_id}&voice=${selected_voice}&format=${format}`, {
         "headers": {
             "accept": "*/*",
             "authorization": `Bearer ${accessToken}`,
@@ -37,14 +84,8 @@ function fetchAudio({message_id, text_content}, callback) {
     })
         .then(response => response.blob())
         .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
+            _audioCached[cacheKey] = {blob, filename};
+            downloadBlob(blob, filename);
         })
         .catch(err => alert(err.message))
         .finally(() => {
@@ -56,35 +97,66 @@ window.addDownload = () => {
     const conversations = document.querySelectorAll('.agent-turn div[data-message-author-role="assistant"]:not([inserted])');
 
     conversations.forEach(item => {
-        const parent = item.parentNode.parentNode.querySelector('div.mt-1.flex');
-        if(parent){
+        const btnPlay = item.parentNode.parentNode.querySelector('button[data-testid="voice-play-turn-action-button"]');
+        const parent = btnPlay.parentNode.parentNode;
+        if (parent) {
             item.setAttribute('inserted', 'true');
             const btnDownload = document.createElement('button');
-            btnDownload.setAttribute('class', 'rounded-full text-red-500 w-8 h-8 border hover:bg-token-main-surface-secondary absolute right-0 flex justify-center items-center border-red-500');
+            btnDownload.setAttribute('class', 'rounded-full text-green-500 w-8 h-8 border hover:bg-token-main-surface-secondary ml-3 flex justify-center items-center border-green-500');
             btnDownload.innerHTML = iconDownload;
             btnDownload.onclick = () => {
                 const text_content = item.innerText;
                 const message_id = item.getAttribute('data-message-id');
                 btnDownload.innerHTML = loadingSpinner;
                 btnDownload.disabled = true;
-                fetchAudio({message_id, text_content}, () => {
+                const selected_voice = btnDownload.getAttribute('selected-voice');
+                fetchAudio({message_id, text_content, selected_voice}, () => {
                     btnDownload.innerHTML = iconDownload;
                     btnDownload.disabled = false;
                 });
             }
             parent.classList.add(...['justify-between', 'mb-3']);
-            parent.append(btnDownload);
+            const span = document.createElement('span');
+            span.setAttribute('class', 'flex gap-2');
+            span.append(btnDownload);
+
+            if(_globalVoices && _globalVoices.length) {
+                btnDownload.setAttribute('selected-voice', _globalVoices[0].voice);
+
+                const selectBox = document.createElement('select');
+                selectBox.onchange = () => {
+                    btnDownload.setAttribute('selected-voice', selectBox.value);
+                }
+                selectBox.setAttribute('title', 'Select voice to download');
+                selectBox.setAttribute('class', 'py-0 bg-gray-50 border border-gray-300 h-8 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500');
+
+                _globalVoices.forEach(item => {
+                    const option = document.createElement('option');
+                    option.setAttribute('value', item.voice);
+                    option.textContent = item.name + ' - ' + item.description;
+                    selectBox.append(option);
+                });
+
+                span.append(selectBox);
+            }
+
+            parent.append(span);
         }
     });
 }
 
 window.addEventListener('load', function () {
-    if(!['chatgpt.com', 'chat.openai.com'].includes(window.location.hostname)){
+    if (!['chatgpt.com', 'chat.openai.com'].includes(window.location.hostname)) {
         return;
     }
-    window.addDownload();
-    setInterval(() => {
-        window.addDownload();
-    }, 2000);
+    fetchVoices()
+        .then(isSuccess => {
+            if (isSuccess) {
+                window.addDownload();
+                setInterval(() => {
+                    window.addDownload();
+                }, 2000);
+            }
+        });
 });
 
